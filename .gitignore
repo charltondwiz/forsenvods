@@ -1,0 +1,12 @@
+post_processed
+segments
+titles
+frames
+output
+*.mp4
+.idea
+.venv
+.DS_Store
+*.png
+__pycache__/
+*.json

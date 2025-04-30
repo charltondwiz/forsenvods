@@ -1,0 +1,137 @@
+# Cloud GPU Options for FFmpeg Rendering
+
+## AWS
+
+### Best Instance Types
+- **G4dn instances**: NVIDIA T4 GPUs, good balance of cost/performance for FFmpeg
+  - g4dn.xlarge: 1 GPU, 4 vCPUs, 16GB RAM - ~$0.526/hour on-demand
+  - g4dn.2xlarge: 1 GPU, 8 vCPUs, 32GB RAM - ~$0.752/hour on-demand
+  
+- **G5 instances**: NVIDIA A10G GPUs, higher performance for demanding workloads
+  - g5.xlarge: 1 GPU, 4 vCPUs, 16GB RAM - ~$1.006/hour on-demand
+  - g5.2xlarge: 1 GPU, 8 vCPUs, 32GB RAM - ~$1.212/hour on-demand
+
+### Spot Pricing
+- G4dn spot instances: 60-70% discount (G4dn.xlarge ~$0.16-0.21/hour)
+- G5 spot instances: 60-70% discount (G5.xlarge ~$0.30-0.40/hour)
+
+### SDK Support
+- Comprehensive Python SDK (boto3) with excellent documentation
+- Easy instance management and automation
+
+### Setup Requirements
+- Amazon Linux 2 AMI with NVIDIA drivers pre-installed
+- Install CUDA toolkit: `sudo amazon-linux-extras install -y cuda`
+- Install FFmpeg with CUDA support: `sudo yum install -y ffmpeg-cuda`
+
+## Google Cloud Platform
+
+### Best Instance Types
+- **N1 with T4 GPU**: Good balance for FFmpeg transcoding
+  - n1-standard-4 + 1 T4 GPU: 4 vCPUs, 15GB RAM - ~$0.45/hour (instance) + ~$0.35/hour (GPU)
+  
+- **N1 with V100**: Higher performance for demanding workloads
+  - n1-standard-8 + 1 V100 GPU: 8 vCPUs, 30GB RAM - ~$0.38/hour (instance) + ~$2.48/hour (GPU)
+
+### Preemptible Pricing
+- 60-80% discount on GPU pricing
+- T4 preemptible: ~$0.11/hour (GPU only)
+- V100 preemptible: ~$0.74/hour (GPU only)
+
+### SDK Support
+- Google Cloud Python SDK with good documentation
+- Easy integration with other GCP services
+
+### Setup Requirements
+- Use Deep Learning VM Images with NVIDIA drivers pre-installed
+- Select image with CUDA 11.x+ for best FFmpeg compatibility
+- Install FFmpeg with CUDA: `apt install -y ffmpeg-cuda`
+
+## Azure
+
+### Best Instance Types
+- **NV-series v4**: NVIDIA M60 GPUs optimized for visualization
+  - Standard_NV6: 6 vCPUs, 56GB RAM, 1 GPU - ~$0.77/hour
+  
+- **NC-series v3**: NVIDIA V100 GPUs for high-performance compute
+  - Standard_NC6s_v3: 6 vCPUs, 112GB RAM, 1 GPU - ~$3.06/hour
+
+### Spot Pricing
+- 60-90% discount (varies by region and demand)
+- NV6 spot: ~$0.23/hour
+- NC6s_v3 spot: ~$0.91/hour 
+
+### SDK Support
+- Azure Python SDK with comprehensive documentation
+- Integration with Azure Machine Learning for workflow automation
+
+### Setup Requirements
+- Use Azure Data Science VM or ML images with NVIDIA drivers
+- Install CUDA Toolkit manually if not included
+- Install FFmpeg with CUDA support from source or custom repository
+
+## Oracle Cloud Infrastructure (OCI)
+
+### Best Instance Types
+- **VM.GPU.A10**: NVIDIA A10 GPUs with good performance/price ratio
+  - VM.GPU2.1: 1 GPU, 12 OCPUs, 85GB RAM - ~$1.27/hour
+  
+- **VM.GPU3.1**: NVIDIA A100 GPUs for highest performance
+  - VM.GPU3.1: 1 GPU, 12 OCPUs, 85GB RAM - ~$3.05/hour
+
+### Preemptible Options
+- "Flexible compute" instances at ~60% discount
+- Limited availability but excellent value
+
+### SDK Support
+- Python SDK available but less mature than AWS/GCP
+- Good documentation for GPU workloads
+
+### Setup Requirements
+- Oracle Linux images with GPU drivers
+- Manual CUDA and FFmpeg installation required
+
+## Managed FFmpeg Services
+
+### AWS Elemental MediaConvert
+- Fully managed video transcoding with GPU acceleration
+- Pay-per-minute pricing (~$0.0075/minute of output video)
+- Simple API but less customizable than raw FFmpeg
+- Excellent for high-volume standardized transcoding tasks
+
+### GCP Transcoder API
+- Managed video transcoding service
+- Pay-per-minute of output video (~$0.08/minute)
+- No FFmpeg customization but excellent scaling
+- Built-in support for adaptive bitrate streaming
+
+### Azure Media Services
+- Managed encoder with GPU acceleration
+- Reserved units or consumption-based pricing
+- Good for broadcast-quality outputs
+- Less flexible than direct FFmpeg access
+
+## Recommendation
+
+For the forsenVods project which combines Twitch VODs with chat and performs video processing, the following is recommended:
+
+### Best Value Option: AWS G4dn Spot Instances
+- **g4dn.xlarge spot instances** (~$0.16-0.21/hour)
+- Sufficient for FFmpeg transcoding tasks in this project
+- AWS Batch for job scheduling to optimize costs
+- Python boto3 SDK integrates well with the existing codebase
+
+### Setup Process:
+1. Launch G4dn instance with Deep Learning AMI
+2. Install required Python packages from requirements.txt
+3. Set up AWS Batch job definition for the transcoding process
+4. Update code to use AWS SDK for launching jobs
+
+### Cost Estimate:
+- Typical 3-hour VOD processing: ~$0.50-0.63 per VOD
+- Monthly processing of 30 VODs: ~$15-19
+
+### Managed Alternative:
+- If simplification is preferred over cost, AWS Elemental MediaConvert
+- Higher cost but no instance management required
+- Excellent scaling for processing multiple VODs simultaneously
