@@ -50,7 +50,7 @@ def initialize_upload(youtube, file_path, title):
     body = {
         'snippet': {
             'title': title,
-            'description': f'Forsen reacts to {title}. \n\n#forsen #forsenreacts #forsenclips #forsenlive',
+            'description': f'{title}. \n\n#forsen #forsenreacts #forsenclips #forsenlive',
             'tags': ['auto-upload'],
             'categoryId': '20'  # Streamer category
         },
@@ -141,7 +141,7 @@ def main():
                 # Add a delay between uploads to avoid rate limiting
                 if video_path != video_files[-1]:  # If not the last video
                     print("Waiting before next upload...")
-                    time.sleep(10)  # Wait 10 seconds between uploads
+                    time.sleep(1)  # Wait 10 seconds between uploads
 
         except Exception as e:
             print(f"Error uploading {title}: {e}")
