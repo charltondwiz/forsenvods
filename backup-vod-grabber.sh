@@ -32,7 +32,7 @@ read -rp "Enter duration of the VOD to download (e.g. 00:12:34 or 3m or 180s): "
 echo "Downloading VOD..."
 for attempt in $(seq 1 100); do
   echo "  attempt $attempt/100…"
-  if ./TwitchDownloaderCLI.exe videodownload \
+  if ./TwitchDownloaderCLI videodownload \
        --id "$VOD_ID" \
        --ending "$VOD_ENDING" \
        -q source \
@@ -60,7 +60,7 @@ echo "VOD duration: ${VOD_DURATION_INT}s"
 
 # ———————— Step 3: Download + render chat ————————
 echo "Downloading chat history…"
-if ! ./TwitchDownloaderCLI.exe chatdownload \
+if ! ./TwitchDownloaderCLI chatdownload \
      --id "$VOD_ID" \
      -o "$CHAT_JSON" -E -e "${VOD_DURATION_INT}s"
 then
@@ -69,7 +69,7 @@ then
 fi
 
 echo "Rendering chat to video…"
-if ! ./TwitchDownloaderCLI.exe chatrender \
+if ! ./TwitchDownloaderCLI chatrender \
      -i "$CHAT_JSON" \
      -h 1080 -w 422 --framerate 30 --font-size 18 --update-rate 0.2 \
      -e "${VOD_DURATION_INT}s" -o "$CHAT_VIDEO"
@@ -84,13 +84,14 @@ if ! ffmpeg -y \
     -i "$VIDEO_FILE" -i "$CHAT_VIDEO" \
     -filter_complex "[0:v]scale=-2:1080:flags=lanczos[v0];[1:v]scale=-2:1080:flags=lanczos[v1];[v0][v1]hstack=2[out]" \
     -map "[out]" -map "0:a?" \
-    -c:v libx264 -preset veryfast -crf 23 \
-    -c:a aac -r 30 -shortest \
+    -c:v h264_videotoolbox -b:v 5000k -r 30 \
+    -c:a aac -shortest \
     "$OUTPUT_FILE"
 then
   echo "Error: ffmpeg combine failed"
   exit 1
 fi
+
 
 echo "✔ Done! Output → $OUTPUT_FILE"
 
