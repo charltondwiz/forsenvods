@@ -52,9 +52,11 @@ def get_title_path(idx: int) -> str:
 try:
     from rapidfuzz import fuzz
     USING_RAPIDFUZZ = True
+    print("USING RAPIDFUZZ")
 except ImportError:
     from difflib import SequenceMatcher
     USING_RAPIDFUZZ = False
+    print("NOT USING RAPIDFUZZ")
 
 
 def calculate_similarity(a: str, b: str) -> float:
@@ -65,12 +67,14 @@ def calculate_similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()  # type: ignore
 
 
-def is_same_youtube_id(id1: str | None, id2: str | None) -> bool:
+def is_same_youtube_id(id1, id2) -> bool:
     if not id1 or not id2:
         return False
     if id1.lower() == id2.lower():
         return True
-    return calculate_similarity(id1, id2) >= SIMILARITY_THRESHOLD
+    score = calculate_similarity(id1, id2)
+    print(id1, id2, "SCORE:", score)
+    return score >= SIMILARITY_THRESHOLD
 
 
 def is_similar_title(t1: str, t2: str) -> bool:
@@ -80,16 +84,18 @@ def is_similar_title(t1: str, t2: str) -> bool:
         return False
     return calculate_similarity(t1, t2) >= SIMILARITY_THRESHOLD
 
-# OCR fallback for YouTube ID detection
-PADDLE_AVAILABLE = False
+# RapidOCR for text detection
+RAPIDOCR_AVAILABLE = False
 OCR_ENGINE = None
 try:
-    from paddleocr import PaddleOCR
-    OCR_ENGINE = PaddleOCR(use_angle_cls=False, lang="en", use_gpu=True, show_log=False, rec=False)
-    PADDLE_AVAILABLE = True
-except Exception:
-    import pytesseract
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    from rapidocr_onnxruntime import RapidOCR
+    OCR_ENGINE = RapidOCR()
+    RAPIDOCR_AVAILABLE = True
+    print("USING RAPIDOCR! YAY!")
+except Exception as e:
+    print(e)
+    print("RAPIDOCR NOT FOUND! WTF!")
+    # No fallback - we're specifically switching to RapidOCR
 
 
 def ocr_extract_text(img: 'cv2.Mat') -> str:
@@ -98,28 +104,43 @@ def ocr_extract_text(img: 'cv2.Mat') -> str:
     gray = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
     _, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     blur = cv2.medianBlur(th, 3)
-    pil = Image.fromarray(blur)
-    cfg = "--oem 3 --psm 6"
 
-    if PADDLE_AVAILABLE:
+    if RAPIDOCR_AVAILABLE:
         try:
-            # run OCR on the *preprocessed* image
-            ocr_result = OCR_ENGINE.ocr(cv2.cvtColor(blur, cv2.COLOR_BGR2RGB), cls=False)
-            # ocr_result should be a list; take the first block if present
-            blocks = ocr_result[0] if ocr_result and len(ocr_result) > 0 else []
-            # if blocks empty, return empty; else join all lines
-            return " ".join([line[1][0] for line in blocks]) if blocks else ""
-        except Exception:
-            # any Paddle error → just return empty
+            # RapidOCR expects RGB image
+            rgb_image = cv2.cvtColor(blur, cv2.COLOR_GRAY2RGB)
+            # Run RapidOCR
+            ocr_result = OCR_ENGINE(rgb_image)
+
+            # Handle different versions of RapidOCR API
+            if len(ocr_result) == 3:
+                result, boxes_list, _ = ocr_result
+            elif len(ocr_result) == 2:
+                result, boxes_list = ocr_result
+            else:
+                print(f"Unexpected RapidOCR result format: {ocr_result}")
+                return ""
+
+            # Extract text from result
+            if result and isinstance(result, list):
+                try:
+                    # Try standard format: list of [text, confidence] pairs
+                    return " ".join([text for text, _ in result]) if result else ""
+                except ValueError:
+                    # If that fails, just join whatever elements are there
+                    return " ".join([str(item) for item in result if item])
+            else:
+                return ""
+        except Exception as e:
+            print(f"RapidOCR error: {e}")
             return ""
     else:
-        try:
-            return pytesseract.image_to_string(pil, config=cfg)
-        except Exception:
-            return ""
+        # No OCR engine available
+        print("No OCR engine available")
+        return ""
 
 
-def get_text_from_image(path: str) -> str | None:
+def get_text_from_image(path: str) -> str:
     img = cv2.imread(path)
     if img is None:
         return None
@@ -151,7 +172,7 @@ def get_title_with_gpt(frame_path: str) -> str:
                     "text": (
                         "Forsen is watching a YouTube video. What is the exact title? "
                         "Respond ONLY with JSON in the form:\n"
-                        "{\"title\":\"<the video’s title>\"}."
+                        "{\"title\":\"<the video's title>\"}."
                     )
                 },
                 {
@@ -170,14 +191,14 @@ def get_title_with_gpt(frame_path: str) -> str:
         messages=messages,
     )
 
-    # 4. Parse the JSON out of GPT’s response
+    # 4. Parse the JSON out of GPT's response
     content = resp.choices[0].message.content
     data = json.loads(content)
     return data.get("title", "")
 # ---------------------------------------------------------------------------
 # YouTube ID extraction via regex
 # ---------------------------------------------------------------------------
-def extract_youtube_id(text: str | None) -> str | None:
+def extract_youtube_id(text: str) -> str:
     if not text:
         return None
     patterns = [
@@ -188,7 +209,15 @@ def extract_youtube_id(text: str | None) -> str | None:
     for pat in patterns:
         m = re.search(pat, text)
         if m:
-            return m.group(1)
+            potential = m.group(1)
+            has_alpha = False
+            for c in potential:
+                if c.isalpha():
+                    has_alpha = True
+
+            if not has_alpha:
+                return None
+            return potential
     return None
 
 # ---------------------------------------------------------------------------
@@ -289,7 +318,7 @@ def find_youtube_segments():
         if yt_id and idx > last_end:
             # 1) If we've never seen this video-id, extract its title now:
             if yt_id not in title_map:
-                # pick a reasonable “title crop” frame—here I use the same idx,
+                # pick a reasonable "title crop" frame—here I use the same idx,
                 # but you could pick `mid_idx` of the block or any representative frame
                 title_frame = get_title_path(idx)
                 try:
